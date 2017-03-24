@@ -69,7 +69,8 @@ void StaticBC::Run(cuStinger& custing)
 	for (length_t k = 0; k < numRoots; k++)
 	{
 		if (approx) {
-			hostBcTree->root = rand() % custing.nv;
+//			hostBcTree->root = rand() % custing.nv;
+			hostBcTree->root = k;
 		} else {
 			hostBcTree->root = k;
 		}

@@ -2,7 +2,7 @@
 #include <cuda_runtime.h>
 #include <stdio.h>
 #include <inttypes.h>
-
+#include <deque>
 #include <math.h>
 
 #include "utils.hpp"
@@ -34,6 +34,7 @@ typedef struct
 	// otherwise defaults to all vertices
 	int numRoots;
 	bool verbose;  // print debug info
+	bool undirected;
 	int edgesToAdd;  // edges to add
 	char *infile;
 } program_options;
@@ -70,12 +71,13 @@ void parse_arguments(int argc, char **argv)
 		{"source_nodes", required_argument, 0, 'k'},
 		{"stream", required_argument, 0, 't'},  // arg is # of edges to insert
 		{"verbose", no_argument, 0,'v'},
+		{"undirected", no_argument, 0, 'u'},
 		{0,0,0,0} // Terminate with null
 	};
 
 	int option_index = 0;
 
-	while((c = getopt_long(argc, argv, "c:de::fg:hi:k:mn::opst:v",
+	while((c = getopt_long(argc, argv, "c:de::fg:hi:k:mn::opst:vu",
 		long_options, &option_index)) != -1)
 	{
 		switch(c)
@@ -101,6 +103,10 @@ void parse_arguments(int argc, char **argv)
 			case 'h':
 				printUsageInfo(argv);
 				exit(0);
+			break;
+
+			case 'u':
+				options.undirected = true;
 			break;
 
 			default: //Fatal error
@@ -134,6 +140,89 @@ void parse_arguments(int argc, char **argv)
 	}
 }
 
+/**
+ * Single pass BC (BFS-traversal)
+ * Code source: GUNROCK simple_example.cu
+ */
+void referenceBC(vertexId_t *offset, vertexId_t *adj, float* bc_values, vertexId_t src, int nv) {
+
+	vertexId_t *source_path = new vertexId_t[nv];
+	int *sigmas = new int[nv];
+
+    //initialize distances
+    for (vertexId_t i = 0; i < nv; ++i)
+    {
+        source_path[i] = -1;
+        bc_values[i] = 0;
+        sigmas[i] = 0;
+    }
+    source_path[src] = 0;
+    int search_depth = 0;
+    sigmas[src] = 1;
+
+    std::deque<vertexId_t> frontier;
+    frontier.push_back(src);
+
+    while (!frontier.empty())
+    {
+        vertexId_t dequeued_node = frontier.front();
+        frontier.pop_front();
+        vertexId_t neighbor_dist = source_path[dequeued_node] + 1;
+
+        int edges_begin = offset[dequeued_node];
+        int edges_end = offset[dequeued_node + 1];
+
+        for (int edge = edges_begin; edge < edges_end; ++edge)
+        {
+            // lookup neighbor and enqueue if unvisited
+            vertexId_t neighbor = adj[edge];
+            if (source_path[neighbor] == -1)
+            {
+                source_path[neighbor] = neighbor_dist;
+                sigmas[neighbor] += sigmas[dequeued_node];
+                if (search_depth < neighbor_dist)
+                {
+                    search_depth = neighbor_dist;
+                }
+                frontier.push_back(neighbor);
+            }
+            else // another shortest path to a previously visited neighbor
+            {
+                if (source_path[neighbor] == source_path[dequeued_node] + 1)
+                    sigmas[neighbor] += sigmas[dequeued_node];
+            }
+        }
+    }
+    search_depth++;
+
+    // bc accumulation phase
+    for (int iter = search_depth - 2; iter > 0; --iter)
+    {
+        for (int node = 0; node < nv; ++node)
+        {
+            if (source_path[node] == iter)
+            {
+                int edges_begin = offset[node];
+                int edges_end = offset[node + 1];
+                for (int edge = edges_begin; edge < edges_end; ++edge)
+                {
+                    vertexId_t neighbor = adj[edge];
+                    if (source_path[neighbor] == iter + 1)
+                    {
+                        bc_values[node] +=
+                            1.0f * sigmas[node] / sigmas[neighbor] *
+                            (1.0f + bc_values[neighbor]);
+                    }
+                }
+            }
+        }
+    }
+
+    printf("CPU BC search depth: %d\n", search_depth);
+    delete[] source_path;
+    delete[] sigmas;
+}
+
 int main(const int argc, char **argv)
 {
 	parse_arguments(argc, argv);
@@ -146,6 +235,7 @@ int main(const int argc, char **argv)
 	bool isDimacs = false;
 	bool isSNAP = false;
 	bool isRmat = false;
+	bool isMM = false;
 	length_t nv, ne, *off;
 	vertexId_t *adj;
 
@@ -154,21 +244,23 @@ int main(const int argc, char **argv)
 	isDimacs = filename.find(".graph")==string::npos?false:true;
 	isSNAP   = filename.find(".txt")==string::npos?false:true;
 	isRmat 	 = filename.find("kron")==string::npos?false:true;
+	isMM = filename.find(".mtx")==std::string::npos?false:true;
 
 	if(isDimacs){
 	    readGraphDIMACS(options.infile, &off, &adj, &nv, &ne, isRmat);
 	} else if(isSNAP){
-	    readGraphSNAP(options.infile, &off, &adj, &nv, &ne);
-	}
-	else {
+	    readGraphSNAP(options.infile, &off, &adj, &nv, &ne, options.undirected);
+	} else if (isMM) {
+		readGraphMatrixMarket(options.infile,&off,&adj,&nv,&ne,options.undirected);
+	} else {
 		cout << "Unknown graph type" << endl;
 		exit(0);
 	}
 
-	// if not in approx mode, set numRoots to number of vertices
-	if (!options.approx) {
-		options.numRoots = nv;
-	}
+//	// if not in approx mode, set numRoots to number of vertices
+//	if (!options.approx) {
+//		options.numRoots = nv;
+//	}
 
 	if (options.verbose) {
 		cout << "Vertices: " << nv << endl;
@@ -217,12 +309,23 @@ int main(const int argc, char **argv)
 	sbc.Reset();
 	sbc.Release();
 
-	if (options.verbose) {
-		cout << "RESULTS: " << endl;
+	// CPU verification
+	float *bc_verify = new float[nv];
 
+	start_clock(ce_start, ce_stop);
+	referenceBC(off, adj, bc_verify, 0, nv);
+	totalTime = end_clock(ce_start, ce_stop);
+	cout << "Total time for CPU verification: " << totalTime << endl;
+
+	float ERROR_THRESH = 1e-3;
+	float error;
+	if (options.verbose) {
 		for (int k = 0; k < nv; k++)
 		{
-			cout << "[ " << k  << " ]: " << bc[k] << endl;
+			error = abs(bc_verify[k] - bc[k]);
+			if (error > ERROR_THRESH) {
+				cout << "[ " << k  << " ]: " << "(" << bc[k] << ", " << bc_verify[k] << ")" << endl;
+			}
 		}
 	}
 
@@ -233,6 +336,7 @@ int main(const int argc, char **argv)
 	free(adj);
 
 	delete[] bc;
+	delete[] bc_verify;
 
     return 0;
 }
