@@ -27,10 +27,11 @@ void StaticBC::Init(cuStinger& custing)
 	if (numRoots == -1 || numRoots == hostBcTree->nv) {
 		approx = false;
 		numRoots = hostBcTree->nv;
+	} else if (roots != NULL) {
+		approx = false;
 	} else {
 		approx = true;
 	}
-
 
 	deviceBcTree = createDeviceBcTree(custing.nv, hostBcTree);
 	host_deltas = new float[custing.nv];
@@ -71,6 +72,8 @@ void StaticBC::Run(cuStinger& custing)
 		if (approx) {
 //			hostBcTree->root = rand() % custing.nv;
 			hostBcTree->root = k;
+		} else if (roots) {
+			hostBcTree->root = roots[k];
 		} else {
 			hostBcTree->root = k;
 		}

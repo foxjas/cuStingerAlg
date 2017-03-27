@@ -10,18 +10,27 @@ namespace cuStingerAlgs {
 
 class StaticBC:public StaticAlgorithm {
 public:
-	// must pass in the number of roots and a pointer to where the bc values
-	// will be stored
-	StaticBC(length_t K, float *bc_array)
-	{
-		numRoots = K;
-		bc = bc_array;
-	}
+
 
 	StaticBC(float *bc_array)
 	{
 		numRoots = -1;  // will set this in Init()
 		bc = bc_array;
+		roots = NULL;
+	}
+
+	StaticBC(length_t K, float *bc_array)
+	{
+		numRoots = K;
+		bc = bc_array;
+		roots = NULL;
+	}
+
+	StaticBC(length_t K, vertexId_t *roots, float *bc_array)
+	{
+		numRoots = K;
+		bc = bc_array;
+		this->roots = roots;
 	}
 
 	void Init(cuStinger& custing);
@@ -65,6 +74,7 @@ private:
 	float *host_deltas;
 	cusLoadBalance* cusLB;
 	length_t numRoots;
+	vertexId_t *roots;
 	bool approx;
 };
 

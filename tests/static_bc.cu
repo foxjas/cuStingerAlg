@@ -294,7 +294,12 @@ int main(const int argc, char **argv)
 		bc[k] = 0;
 	}
 
-	StaticBC sbc(options.numRoots, bc);
+	vertexId_t *sources = new vertexId_t[options.numRoots];
+	for (int i=0; i<options.numRoots; i++) {
+		sources[i] = i;
+	}
+
+	StaticBC sbc(options.numRoots, sources, bc);
 	sbc.Init(custing);
 	sbc.Reset();
 
@@ -309,17 +314,15 @@ int main(const int argc, char **argv)
 	sbc.Reset();
 	sbc.Release();
 
-	// CPU verification
-	float *bc_verify = new float[nv];
-
-	start_clock(ce_start, ce_stop);
-	referenceBC(off, adj, bc_verify, 0, nv);
-	totalTime = end_clock(ce_start, ce_stop);
-	cout << "Total time for CPU verification: " << totalTime << endl;
-
 	float ERROR_THRESH = 1e-3;
 	float error;
 	if (options.verbose) {
+		// CPU verification
+		float *bc_verify = new float[nv];
+		start_clock(ce_start, ce_stop);
+		referenceBC(off, adj, bc_verify, 0, nv);
+		totalTime = end_clock(ce_start, ce_stop);
+		cout << "Total time for CPU verification: " << totalTime << endl;
 		for (int k = 0; k < nv; k++)
 		{
 			error = abs(bc_verify[k] - bc[k]);
@@ -327,6 +330,7 @@ int main(const int argc, char **argv)
 				cout << "[ " << k  << " ]: " << "(" << bc[k] << ", " << bc_verify[k] << ")" << endl;
 			}
 		}
+		delete[] bc_verify;
 	}
 
 	// Free memory
@@ -334,9 +338,7 @@ int main(const int argc, char **argv)
 
 	free(off);
 	free(adj);
-
 	delete[] bc;
-	delete[] bc_verify;
 
     return 0;
 }
