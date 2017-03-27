@@ -24,36 +24,58 @@ using namespace cuStingerAlgs;
 
 
 #define CUDA(call, ...) do {                        \
-        cudaError_t _e = (call);                    \
-        if (_e == cudaSuccess) break;               \
-        fprintf(stdout,                             \
-                "CUDA runtime error: %s (%d)\n",    \
-                cudaGetErrorString(_e), _e);        \
-        return -1;                                  \
-    } while (0)
+		cudaError_t _e = (call);                    \
+		if (_e == cudaSuccess) break;               \
+		fprintf(stdout,                             \
+				"CUDA runtime error: %s (%d)\n",    \
+				cudaGetErrorString(_e), _e);        \
+				return -1;                                  \
+} while (0)
 
-
-//bool compare(std::pair<vertexId_t, int> a, std::pair<vertexId_t, int> b)
-//{
-//	return a.second < b.second;
-//}
 
 class CompareDist
 {
 public:
-    bool operator()(pair<int,int> n1,pair<int,int> n2) {
-        return n1.second > n2.second;
-    }
+	bool operator()(pair<int,int> n1,pair<int,int> n2) {
+		return n1.second > n2.second;
+	}
 };
+
+// extracts top k vertices by degree
+void topKVertices(int K, int n, vertexId_t *off, vertexId_t *out) {
+	priority_queue<pair<int, int>, vector<pair<int, int>>,CompareDist> min_heap;
+	length_t deg;
+	length_t maxDeg;
+	for(int v=1; v<n;v++){
+		deg = off[v+1]-off[v];
+		if (min_heap.size() >= K) {
+			std::pair<int, int> p = min_heap.top();
+			maxDeg = p.second;
+			if (deg > maxDeg) {
+				min_heap.pop();
+				min_heap.push(std::make_pair(v, deg));
+			}
+		} else {
+			min_heap.push(std::make_pair(v, deg));
+		}
+	}
+
+	vertexId_t v;
+	for (int i=0; i<K; i++) {
+		v = min_heap.top().first;
+		out[i] = v;
+		min_heap.pop();
+	}
+}
 
 int main(const int argc, char *argv[]){
 	int device=0;
-    cudaSetDevice(device);
+	cudaSetDevice(device);
 	cudaDeviceProp prop;
 	cudaGetDeviceProperties(&prop, device);
- 
-    length_t nv, ne,*off;
-    vertexId_t *adj;
+
+	length_t nv, ne,*off;
+	vertexId_t *adj;
 
 	bool isDimacs,isSNAP,isRmat,isMarket;
 	string filename(argv[1]);
@@ -64,10 +86,10 @@ int main(const int argc, char *argv[]){
 	bool undirected = hasOption("--undirected", argc, argv);
 
 	if(isDimacs){
-	    readGraphDIMACS(argv[1],&off,&adj,&nv,&ne,undirected);
+		readGraphDIMACS(argv[1],&off,&adj,&nv,&ne,undirected);
 	}
 	else if(isSNAP){
-	    readGraphSNAP(argv[1],&off,&adj,&nv,&ne,undirected);
+		readGraphSNAP(argv[1],&off,&adj,&nv,&ne,undirected);
 	}
 	else if(isMarket){
 		readGraphMatrixMarket(argv[1],&off,&adj,&nv,&ne,undirected);
@@ -99,31 +121,41 @@ int main(const int argc, char *argv[]){
 
 	custing.initializeCuStinger(cuInit);
 
-	
 	float totalTime;
 
-//	ccBaseline scc;
-//	scc.Init(custing);
-//	scc.Reset();
-//	start_clock(ce_start, ce_stop);
-////	scc.Run(custing);
-//	totalTime = end_clock(ce_start, ce_stop);
-//	// cout << "The number of iterations           : " << scc.GetIterationCount() << endl;
-//	// cout << "The number of connected-compoents  : " << scc.CountConnectComponents(custing) << endl;
-//	// cout << "Total time for connected-compoents : " << totalTime << endl;
-//	scc.Release();
+	// Finding k-largest vertices
+	int K = 100;
+	cout << "K: " << K << endl;
+	vertexId_t *topKV = new vertexId_t[K];
+	topKVertices(K, nv, off, topKV);
 
-//	ccConcurrent scc2;
-//	scc2.Init(custing);
-//	scc2.Reset();
-//	start_clock(ce_start, ce_stop);
-//    // scc2.Run(custing);
-//	totalTime = end_clock(ce_start, ce_stop);
-//	// cout << "The number of iterations           : " << scc2.GetIterationCount() << endl;
-//	// cout << "The number of connected-compoents  : " << scc2.CountConnectComponents(custing) << endl;
-//	// cout << "Total time for connected-compoents : " << totalTime << endl;
-//	scc2.Release();
+	bfsTD bfs;
+	bfs.Init(custing);
+	for (int i=0; i<K; i++) {
+		bfs.Reset();
+		bfs.setInputParameters(topKV[i]);
+		start_clock(ce_start, ce_stop);
+		bfs.Run(custing);
+		totalTime += end_clock(ce_start, ce_stop);
+	}
+	cout << "App: BFS (top-down), Graph: " << rawname << endl;
+	//	cout << "The number of levels: " << bfs.getLevels() << endl;
+	//	cout << "The number of elements found: " << bfs.getElementsFound() << endl;
+	cout << "Total time: " << totalTime << endl;
 
+	bfs.Release();
+
+	float *bc = (float *)calloc(nv, sizeof(float));
+	StaticBC sbc(K, topKV, bc);
+	sbc.Init(custing);
+	sbc.Reset();
+
+	start_clock(ce_start, ce_stop);
+	sbc.Run(custing);
+	totalTime = end_clock(ce_start, ce_stop);
+	cout << "App: BC, Graph: " << rawname << endl;
+	cout << "Total time: " << totalTime << endl;
+	free(bc);
 
 	ccConcurrentLB scc3;
 	scc3.Init(custing);
@@ -137,53 +169,6 @@ int main(const int argc, char *argv[]){
 	cout << "Total time: " << totalTime << endl;
 	scc3.Release();
 
-	// ccConcurrentOptimized scc4;
-	// scc4.Init(custing);
-	// scc4.Reset();
-	// start_clock(ce_start, ce_stop);
-	// scc4.Run(custing);
-	// totalTime = end_clock(ce_start, ce_stop);
-	// cout << "The number of iterations           : " << scc4.GetIterationCount() << endl;
-	// cout << "The number of connected-compoents  : " << scc4.CountConnectComponents(custing) << endl;
-	// cout << "Total time for connected-compoents : " << totalTime << endl; 
-	// scc4.Release();
-
-	// Finding k-largest vertices
-	int K = 100;
-	priority_queue<pair<int, int>, vector<pair<int, int>>,CompareDist> min_heap;
-	length_t deg;
-	length_t maxDeg;
-	for(int v=1; v<nv;v++){
-		deg = off[v+1]-off[v];
-		if (min_heap.size() >= K) {
-			std::pair<int, int> p = min_heap.top();
-			maxDeg = p.second;
-			if (deg > maxDeg) {
-				min_heap.pop();
-				min_heap.push(std::make_pair(v, deg));
-			}
-		} else {
-			min_heap.push(std::make_pair(v, deg));
-		}
-	}
-
-	bfsTD bfs;
-	bfs.Init(custing);
-	for (int i=0; i<K; i++) {
-		bfs.Reset();
-		bfs.setInputParameters(min_heap.top().first);
-		start_clock(ce_start, ce_stop);
-		bfs.Run(custing);
-		totalTime += end_clock(ce_start, ce_stop);
-		min_heap.pop();
-	}
-	cout << "App: BFS (top-down), Graph: " << rawname << endl;
-//	cout << "The number of levels: " << bfs.getLevels() << endl;
-//	cout << "The number of elements found: " << bfs.getElementsFound() << endl;
-	cout << "Total time: " << totalTime << endl;
-
-	bfs.Release();
-
 	StaticPageRank pr;
 	pr.Init(custing);
 	pr.Reset();
@@ -194,14 +179,15 @@ int main(const int argc, char *argv[]){
 	cout << "App: pr, Graph: " << rawname << endl;
 	cout << "The number of iterations: " << pr.getIterationCount() << endl;
 	cout << "Total time: " << totalTime << endl;
-	cout << "Per iteration average: " << totalTime/(float)pr.getIterationCount() << endl;
-//	pr.printRankings(custing);
+	//	cout << "Per iteration average: " << totalTime/(float)pr.getIterationCount() << endl;
+	//	pr.printRankings(custing);
 
 	pr.Release();
 	custing.freecuStinger();
 
 	free(off);
 	free(adj);
-    return 0;	
+	delete[] topKV;
+	return 0;
 }
 
