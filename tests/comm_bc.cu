@@ -107,15 +107,16 @@ vector<vector<vertexId_t>> parseInfomapCommunities(char *fpath, int nv) {
 }
 
 void subgraphCSR(vector<vertexId_t> const &community, length_t *off, vertexId_t *adj,
-		length_t **off_sub, vertexId_t **adj_sub)
+		length_t **off_sub, vertexId_t **adj_sub, vertexId_t *NV, length_t *NE)
 {
     unordered_map<vertexId_t, vertexId_t> relabel_map;
     vertexId_t nv = community.size();
     vector<length_t> degrees(nv, 0);
+
     // fill in degrees for new subgraph
     for (vertexId_t i=0; i<nv; i++) {
     	relabel_map[community[i]] = i;
-    	degrees[i] = off[community[i+1]]-off[community[i]];
+    	degrees[i] = off[community[i]+1]-off[community[i]];
     }
 
     // offsets of new subgraph
@@ -141,6 +142,8 @@ void subgraphCSR(vector<vertexId_t> const &community, length_t *off, vertexId_t 
 
     *off_sub = off_new;
     *adj_sub = adj_new;
+    *NV = nv;
+    *NE = ne;
 }
 
 int main(const int argc, char *argv[]){
@@ -223,9 +226,19 @@ int main(const int argc, char *argv[]){
 //    for (vector<vertexId_t> comm : communities) {
 //    	printf("%d: %d\n", i++, comm.size());
 //    }
+    int nv_sub;
+    int ne_sub;
+    length_t *off_sub;
+    vertexId_t *adj_sub;
+
+    // TODO: verify correctness
+    subgraphCSR(communities[0], off, adj, &off_sub, &adj_sub, &nv_sub, &ne_sub);
+    printf("nv_sub: %d, ne_sub: %d\n", nv_sub, ne_sub);
 
     free(off);
     free(adj);
+    free(off_sub);
+    free(adj_sub);
 //    delete[] topKV;
     return 0;
 }
