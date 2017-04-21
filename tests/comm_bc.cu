@@ -6,6 +6,7 @@
 #include <queue>
 #include <functional>
 #include <vector>
+#include <unordered_map>
 #include <utility>
 #include "utils.hpp"
 #include "update.hpp"
@@ -60,6 +61,43 @@ void topKVertices(int K, int n, vertexId_t *off, vertexId_t *out) {
         out[i] = v;
         min_heap.pop();
     }
+}
+
+void subgraphCSR(vector<vertexId_t> const &community, length_t *off, vertexId_t *adj,
+		length_t **off_sub, vertexId_t **adj_sub)
+{
+    unordered_map<vertexId_t, vertexId_t> relabel_map;
+    vertexId_t nv = community.size();
+    vector<length_t> degrees(nv, 0);
+    // fill in degrees for new subgraph
+    for (vertexId_t i=0; i<nv; i++) {
+    	relabel_map[community[i]] = i;
+    	degrees[i] = off[community[i+1]]-off[community[i]];
+    }
+
+    // offsets of new subgraph
+    length_t *off_new = (length_t*)malloc(sizeof(length_t)*(nv+1));
+    off_new[0]=0;
+    for(vertexId_t v=0; v<nv;v++)
+        off_new[v+1]=off_new[v]+degrees[v];
+
+    for(vertexId_t v=0; v<nv;v++)
+        degrees[v]=0;
+
+    // adjacencies of new subgraph
+    length_t ne = off_new[nv];
+    vertexId_t *adj_new = (vertexId_t*)malloc(sizeof(vertexId_t)*ne);
+    for (vertexId_t src : community) {
+    	vertexId_t relabeled_src = relabel_map[src];
+    	for (length_t k = off[src]; k<off[src+1]; k++) {
+    		vertexId_t dest = adj[k];
+    		vertexId_t relabeled_dest = relabel_map[dest];
+    		adj_new[off_new[relabeled_src]+degrees[relabeled_src]++] = relabeled_dest;
+    	}
+    }
+
+    *off_sub = off_new;
+    *adj_sub = adj_new;
 }
 
 int main(const int argc, char *argv[]){
