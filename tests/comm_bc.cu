@@ -28,6 +28,14 @@ using namespace cuStingerAlgs;
 } while (0)
 
 
+char* getOption(const char* option, int argc, char **argv) {
+  for (int i = 1; i < argc-1; i++) {
+      if (strcmp(argv[i], option) == 0)
+          return argv[i+1];
+  }
+  return NULL;
+}
+
 class CompareDist
 {
 public:
@@ -61,6 +69,41 @@ void topKVertices(int K, int n, vertexId_t *off, vertexId_t *out) {
         out[i] = v;
         min_heap.pop();
     }
+}
+
+vector<vector<vertexId_t>> parseInfomapCommunities(char *fpath, int nv) {
+
+	vector<vector<vertexId_t>> communities;
+    FILE *com_fp = fopen(fpath, "r");
+    const int MAX_CHARS = 1000;
+    char temp[MAX_CHARS];
+    vertexId_t vid;
+    int cid, prev_cid=-1;
+    vector<vertexId_t> curr_comm;
+    char* written = fgets(temp, MAX_CHARS, com_fp);
+    while (written != NULL && *temp == '#') { // skip comments
+        written = fgets(temp, MAX_CHARS, com_fp);
+    }
+    while (written != NULL) {
+        sscanf(temp, "%d %d %*s\n", (vertexId_t*)&vid, (int*)&cid);
+        if (prev_cid == -1)
+        	prev_cid = cid;
+        if (cid != prev_cid && curr_comm.size()) {
+        	communities.push_back(curr_comm);
+        	curr_comm.clear();
+        	prev_cid = cid;
+        }
+        curr_comm.push_back(vid);
+        written = fgets(temp, MAX_CHARS, com_fp);
+    }
+
+    // handle remaining elements
+    if (curr_comm.size()) {
+    	communities.push_back(curr_comm);
+    }
+
+    fclose(com_fp);
+	return communities;
 }
 
 void subgraphCSR(vector<vertexId_t> const &community, length_t *off, vertexId_t *adj,
@@ -116,6 +159,7 @@ int main(const int argc, char *argv[]){
     isRmat   = filename.find("kron")==std::string::npos?false:true;
     isMarket = filename.find(".mtx")==std::string::npos?false:true;
     bool undirected = hasOption("--undirected", argc, argv);
+    char *comm_file = getOption("-p", argc, argv); // communities file path
 
     if(isDimacs){
         readGraphDIMACS(argv[1],&off,&adj,&nv,&ne,undirected);
@@ -150,33 +194,39 @@ int main(const int argc, char *argv[]){
     cuInit.csrVW            = NULL;
     cuInit.csrEW            = NULL;
 
-    custing.initializeCuStinger(cuInit);
+//    custing.initializeCuStinger(cuInit);
+//
+//    float totalTime;
+//
+//    // Finding k-largest vertices
+//    int K = 100;
+//    cout << "K: " << K << endl;
+//    vertexId_t *topKV = new vertexId_t[K];
+//    topKVertices(K, nv, off, topKV);
+//
+//    float *bc = (float *)calloc(nv, sizeof(float));
+//    StaticBC sbc(K, topKV, bc);
+//    sbc.Init(custing);
+//    sbc.Reset();
+//
+//    start_clock(ce_start, ce_stop);
+//    sbc.Run(custing);
+//    totalTime = end_clock(ce_start, ce_stop);
+//    cout << "App: BC, Graph: " << rawname << endl;
+//    cout << "Total time: " << totalTime << endl;
+//    free(bc);
+//
+//    custing.freecuStinger();
 
-    float totalTime;
-
-    // Finding k-largest vertices
-    int K = 100;
-    cout << "K: " << K << endl;
-    vertexId_t *topKV = new vertexId_t[K];
-    topKVertices(K, nv, off, topKV);
-
-    float *bc = (float *)calloc(nv, sizeof(float));
-    StaticBC sbc(K, topKV, bc);
-    sbc.Init(custing);
-    sbc.Reset();
-
-    start_clock(ce_start, ce_stop);
-    sbc.Run(custing);
-    totalTime = end_clock(ce_start, ce_stop);
-    cout << "App: BC, Graph: " << rawname << endl;
-    cout << "Total time: " << totalTime << endl;
-    free(bc);
-
-    custing.freecuStinger();
+    vector<vector<vertexId_t>> communities = parseInfomapCommunities(comm_file, nv);
+//    int i = 1;
+//    for (vector<vertexId_t> comm : communities) {
+//    	printf("%d: %d\n", i++, comm.size());
+//    }
 
     free(off);
     free(adj);
-    delete[] topKV;
+//    delete[] topKV;
     return 0;
 }
 
