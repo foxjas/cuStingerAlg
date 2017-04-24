@@ -146,6 +146,27 @@ void subgraphCSR(vector<vertexId_t> const &community, length_t *off, vertexId_t 
     *NE = ne;
 }
 
+void printCommunityInfo(vector<vector<vertexId_t>> communities, length_t *off, vertexId_t *adj) {
+    int nv_sub;
+    int ne_sub;
+    length_t *off_sub;
+    vertexId_t *adj_sub;
+
+    printf("id nv ne\n");
+    length_t ne_total = 0;
+    vertexId_t nv_total = 0;
+    for (int i=0; i<communities.size(); i++) {
+    	vector<vertexId_t> comm = communities[i];
+        subgraphCSR(comm, off, adj, &off_sub, &adj_sub, &nv_sub, &ne_sub);
+        printf("%d %d %d\n", i+1, nv_sub, ne_sub);
+        ne_total += ne_sub;
+        nv_total += nv_sub;
+    }
+    printf("%d %d\n", nv_total, ne_total);
+    free(off_sub);
+    free(adj_sub);
+}
+
 int main(const int argc, char *argv[]){
     int device=0;
     cudaSetDevice(device);
@@ -177,63 +198,51 @@ int main(const int argc, char *argv[]){
         cout << "Unknown graph type" << endl;
     }
 
-    size_t i1 = filename.find_last_of("/");
-    size_t i2 = filename.find_last_of(".");
-    string rawname = filename.substr(i1+1, i2-i1-1);
-
-    cudaEvent_t ce_start,ce_stop;
-    cuStinger custing(defaultInitAllocater,defaultUpdateAllocater);
-
-    cuStingerInitConfig cuInit;
-    cuInit.initState =eInitStateCSR;
-    cuInit.maxNV = nv+1;
-    cuInit.useVWeight = false;
-    cuInit.isSemantic = false;
-    cuInit.useEWeight = false;
-    cuInit.csrNV            = nv;
-    cuInit.csrNE            = ne;
-    cuInit.csrOff           = off;
-    cuInit.csrAdj           = adj;
-    cuInit.csrVW            = NULL;
-    cuInit.csrEW            = NULL;
-
-//    custing.initializeCuStinger(cuInit);
-//
-//    float totalTime;
-//
-//    // Finding k-largest vertices
-//    int K = 100;
-//    cout << "K: " << K << endl;
-//    vertexId_t *topKV = new vertexId_t[K];
-//    topKVertices(K, nv, off, topKV);
-//
-//    float *bc = (float *)calloc(nv, sizeof(float));
-//    StaticBC sbc(K, topKV, bc);
-//    sbc.Init(custing);
-//    sbc.Reset();
-//
-//    start_clock(ce_start, ce_stop);
-//    sbc.Run(custing);
-//    totalTime = end_clock(ce_start, ce_stop);
-//    cout << "App: BC, Graph: " << rawname << endl;
-//    cout << "Total time: " << totalTime << endl;
-//    free(bc);
-//
-//    custing.freecuStinger();
+//    size_t i1 = filename.find_last_of("/");
+//    size_t i2 = filename.find_last_of(".");
+//    string rawname = filename.substr(i1+1, i2-i1-1);
 
     vector<vector<vertexId_t>> communities = parseInfomapCommunities(comm_file, nv);
-//    int i = 1;
-//    for (vector<vertexId_t> comm : communities) {
-//    	printf("%d: %d\n", i++, comm.size());
-//    }
     int nv_sub;
     int ne_sub;
     length_t *off_sub;
     vertexId_t *adj_sub;
 
-    // TODO: verify correctness
-    subgraphCSR(communities[0], off, adj, &off_sub, &adj_sub, &nv_sub, &ne_sub);
-    printf("nv_sub: %d, ne_sub: %d\n", nv_sub, ne_sub);
+    cudaEvent_t ce_start,ce_stop;
+    cuStinger custing(defaultInitAllocater,defaultUpdateAllocater);
+    cuStingerInitConfig cuInit;
+    cuInit.initState =eInitStateCSR;
+    cuInit.useVWeight = false;
+    cuInit.isSemantic = false;
+    cuInit.useEWeight = false;
+    cuInit.csrVW            = NULL;
+    cuInit.csrEW            = NULL;
+    float *bc;
+    float time;
+    float totalTime = 0.0;
+//    printCommunityInfo(communities, off, adj);
+    for (int i=0; i<communities.size(); i++) {
+    	vector<vertexId_t> comm = communities[i];
+        subgraphCSR(comm, off, adj, &off_sub, &adj_sub, &nv_sub, &ne_sub);
+        cuInit.maxNV = nv_sub+1;
+        cuInit.csrNV            = nv_sub;
+        cuInit.csrNE            = ne_sub;
+        cuInit.csrOff           = off_sub;
+        cuInit.csrAdj           = adj_sub;
+        custing.initializeCuStinger(cuInit);
+		bc = (float *)calloc(nv, sizeof(float));
+		StaticBC sbc(bc);
+		sbc.Init(custing);
+		sbc.Reset();
+		start_clock(ce_start, ce_stop);
+		sbc.Run(custing);
+		time = end_clock(ce_start, ce_stop);
+		printf("%d %f\n", i+1, time);
+		totalTime += time;
+		free(bc);
+        custing.freecuStinger();
+    }
+    printf("Total time for %d communities: %f\n", communities.size(), totalTime);
 
     free(off);
     free(adj);
