@@ -70,17 +70,18 @@ void StaticBC::Run(cuStinger& custing)
 	for (length_t k = 0; k < numRoots; k++)
 	{
 		if (approx) {
-//			hostBcTree->root = rand() % custing.nv;
-			hostBcTree->root = k;
+			hostBcTree->root = rand() % custing.nv;
+//			hostBcTree->root = k;
 		} else if (roots) {
 			hostBcTree->root = roots[k];
 		} else {
 			hostBcTree->root = k;
 		}
 		SyncDeviceWithHost();
+		printf("d\n");
 		RunBfsTraversal(custing);
+		printf("e\n");
 		DependencyAccumulation(custing);
-
 		Reset();  // must do this
 	}
 }
@@ -91,9 +92,7 @@ void StaticBC::RunBfsTraversal(cuStinger& custing)
 	// Clear out array values first
 	allVinG_TraverseVertices<bcOperator::setupArrays>(custing, deviceBcTree);
 	hostBcTree->queue.enqueueFromHost(hostBcTree->root);
-
 	SyncDeviceWithHost();
-
 
 	// set d[root] <- 0
 	int zero = 0;
@@ -108,13 +107,15 @@ void StaticBC::RunBfsTraversal(cuStinger& custing)
 
 	length_t prevEnd = 1;
 	hostBcTree->offsets[0] = 1;
-	
+
 	while( hostBcTree->queue.getActiveQueueSize() > 0)
 	{
 
 		allVinA_TraverseEdges_LB<bcOperator::bcExpandFrontier>(custing, 
 			deviceBcTree, *cusLB, hostBcTree->queue);
+		printf("g\n");
 		SyncHostWithDevice();
+		printf("h\n");
 
 		// Update cumulative offsets from start of queue
 		hostBcTree->queue.setQueueCurr(prevEnd);

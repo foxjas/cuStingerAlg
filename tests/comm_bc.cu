@@ -3,10 +3,12 @@
 #include <stdio.h>
 #include <inttypes.h>
 #include <math.h>
+#include <assert.h>
 #include <queue>
 #include <functional>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include "utils.hpp"
 #include "update.hpp"
@@ -112,32 +114,47 @@ void subgraphCSR(vector<vertexId_t> const &community, length_t *off, vertexId_t 
     unordered_map<vertexId_t, vertexId_t> relabel_map;
     vertexId_t nv = community.size();
     vector<length_t> degrees(nv, 0);
+    vector<pair<vertexId_t, vertexId_t>> edges;
 
-    // fill in degrees for new subgraph
-    for (vertexId_t i=0; i<nv; i++) {
+    for (vertexId_t i=0; i<nv; i++)
     	relabel_map[community[i]] = i;
-    	degrees[i] = off[community[i]+1]-off[community[i]];
+
+    int ecount = 0;
+    unordered_map<vertexId_t, vertexId_t>::const_iterator m;
+    for (vertexId_t src : community) {
+    	for (length_t k = off[src]; k<off[src+1]; k++) {
+    		vertexId_t dest = adj[k];
+    		m = relabel_map.find(dest);
+    		if (m != relabel_map.end()) {
+    			edges.push_back(make_pair(src, dest));
+    			ecount += 1;
+    		}
+    	}
+    }
+
+    // fill in degrees array
+    vertexId_t relabeledSrcId, relabeledDestId;
+    for (int i=0; i<edges.size(); i++) {
+        relabeledSrcId = relabel_map[edges[i].first];
+        degrees[relabeledSrcId]++;
     }
 
     // offsets of new subgraph
     length_t *off_new = (length_t*)malloc(sizeof(length_t)*(nv+1));
     off_new[0]=0;
-    for(vertexId_t v=0; v<nv;v++)
+    for(vertexId_t v=0; v<nv;v++) {
         off_new[v+1]=off_new[v]+degrees[v];
-
-    for(vertexId_t v=0; v<nv;v++)
         degrees[v]=0;
+    }
 
     // adjacencies of new subgraph
     length_t ne = off_new[nv];
+    assert(ne == ecount);
     vertexId_t *adj_new = (vertexId_t*)malloc(sizeof(vertexId_t)*ne);
-    for (vertexId_t src : community) {
-    	vertexId_t relabeled_src = relabel_map[src];
-    	for (length_t k = off[src]; k<off[src+1]; k++) {
-    		vertexId_t dest = adj[k];
-    		vertexId_t relabeled_dest = relabel_map[dest];
-    		adj_new[off_new[relabeled_src]+degrees[relabeled_src]++] = relabeled_dest;
-    	}
+    for (int i=0; i<edges.size(); i++) {
+        relabeledSrcId = relabel_map[edges[i].first];
+        relabeledDestId = relabel_map[edges[i].second];
+		adj_new[off_new[relabeledSrcId]+degrees[relabeledSrcId]++] = relabeledDestId;
     }
 
     *off_sub = off_new;
@@ -198,38 +215,49 @@ int main(const int argc, char *argv[]){
         cout << "Unknown graph type" << endl;
     }
 
-//    size_t i1 = filename.find_last_of("/");
-//    size_t i2 = filename.find_last_of(".");
-//    string rawname = filename.substr(i1+1, i2-i1-1);
-
     vector<vector<vertexId_t>> communities = parseInfomapCommunities(comm_file, nv);
-    int nv_sub;
-    int ne_sub;
-    length_t *off_sub;
-    vertexId_t *adj_sub;
 
     cudaEvent_t ce_start,ce_stop;
     cuStinger custing(defaultInitAllocater,defaultUpdateAllocater);
     cuStingerInitConfig cuInit;
-    cuInit.initState =eInitStateCSR;
+    cuInit.initState = eInitStateCSR;
     cuInit.useVWeight = false;
     cuInit.isSemantic = false;
     cuInit.useEWeight = false;
-    cuInit.csrVW            = NULL;
-    cuInit.csrEW            = NULL;
+    cuInit.csrVW = NULL;
+    cuInit.csrEW = NULL;
+    int nv_sub;
+    int ne_sub;
+    length_t *off_sub;
+    vertexId_t *adj_sub;
     float *bc;
     float time;
     float totalTime = 0.0;
 //    printCommunityInfo(communities, off, adj);
-    for (int i=0; i<communities.size(); i++) {
+    for (int i=426; i<427; i++) {
     	vector<vertexId_t> comm = communities[i];
         subgraphCSR(comm, off, adj, &off_sub, &adj_sub, &nv_sub, &ne_sub);
         cuInit.maxNV = nv_sub+1;
-        cuInit.csrNV            = nv_sub;
-        cuInit.csrNE            = ne_sub;
-        cuInit.csrOff           = off_sub;
-        cuInit.csrAdj           = adj_sub;
+        cuInit.csrNV = nv_sub;
+        cuInit.csrNE = ne_sub;
+        cuInit.csrOff = off_sub;
+        cuInit.csrAdj = adj_sub;
         custing.initializeCuStinger(cuInit);
+        printf("nv_sub: %d\n", nv_sub);
+        printf("Off: ");
+        for (int j=0; j<nv_sub+1; j++) {
+        	printf("%d ", off_sub[j]);
+        }
+        printf("\n");
+
+        printf("ne_sub: %d\n", ne_sub);
+        printf("Adj: ");
+        for (int j=0; j<ne_sub; j++) {
+        	printf("%d ", adj_sub[j]);
+        	assert(adj_sub[j] >= 0 && adj_sub[j] < nv_sub);
+        }
+        printf("\n");
+
 		bc = (float *)calloc(nv, sizeof(float));
 		StaticBC sbc(bc);
 		sbc.Init(custing);
@@ -239,6 +267,8 @@ int main(const int argc, char *argv[]){
 		time = end_clock(ce_start, ce_stop);
 		printf("%d %f\n", i+1, time);
 		totalTime += time;
+		free(off_sub);
+		free(adj_sub);
 		free(bc);
         custing.freecuStinger();
     }
@@ -246,8 +276,6 @@ int main(const int argc, char *argv[]){
 
     free(off);
     free(adj);
-    free(off_sub);
-    free(adj_sub);
 //    delete[] topKV;
     return 0;
 }
