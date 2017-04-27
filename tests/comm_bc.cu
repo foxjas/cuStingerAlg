@@ -234,7 +234,7 @@ int main(const int argc, char *argv[]){
     float time;
     float totalTime = 0.0;
 //    printCommunityInfo(communities, off, adj);
-    for (int i=426; i<427; i++) {
+    for (int i=0; i<communities.size(); i++) {
     	vector<vertexId_t> comm = communities[i];
         subgraphCSR(comm, off, adj, &off_sub, &adj_sub, &nv_sub, &ne_sub);
         cuInit.maxNV = nv_sub+1;
@@ -243,21 +243,6 @@ int main(const int argc, char *argv[]){
         cuInit.csrOff = off_sub;
         cuInit.csrAdj = adj_sub;
         custing.initializeCuStinger(cuInit);
-        printf("nv_sub: %d\n", nv_sub);
-        printf("Off: ");
-        for (int j=0; j<nv_sub+1; j++) {
-        	printf("%d ", off_sub[j]);
-        }
-        printf("\n");
-
-        printf("ne_sub: %d\n", ne_sub);
-        printf("Adj: ");
-        for (int j=0; j<ne_sub; j++) {
-        	printf("%d ", adj_sub[j]);
-        	assert(adj_sub[j] >= 0 && adj_sub[j] < nv_sub);
-        }
-        printf("\n");
-
 		bc = (float *)calloc(nv, sizeof(float));
 		StaticBC sbc(bc);
 		sbc.Init(custing);

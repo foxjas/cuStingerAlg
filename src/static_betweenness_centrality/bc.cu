@@ -78,9 +78,7 @@ void StaticBC::Run(cuStinger& custing)
 			hostBcTree->root = k;
 		}
 		SyncDeviceWithHost();
-		printf("d\n");
 		RunBfsTraversal(custing);
-		printf("e\n");
 		DependencyAccumulation(custing);
 		Reset();  // must do this
 	}
@@ -113,9 +111,7 @@ void StaticBC::RunBfsTraversal(cuStinger& custing)
 
 		allVinA_TraverseEdges_LB<bcOperator::bcExpandFrontier>(custing, 
 			deviceBcTree, *cusLB, hostBcTree->queue);
-		printf("g\n");
 		SyncHostWithDevice();
-		printf("h\n");
 
 		// Update cumulative offsets from start of queue
 		hostBcTree->queue.setQueueCurr(prevEnd);
