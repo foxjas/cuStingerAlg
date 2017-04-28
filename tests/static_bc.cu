@@ -299,7 +299,7 @@ int main(const int argc, char **argv)
 		sources[i] = i;
 	}
 
-	StaticBC sbc(options.numRoots, sources, bc);
+	StaticBC sbc(bc);
 	sbc.Init(custing);
 	sbc.Reset();
 
