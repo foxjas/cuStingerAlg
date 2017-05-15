@@ -233,31 +233,31 @@ int main(const int argc, char *argv[]){
     float *bc;
     float time;
     float totalTime = 0.0;
-//    printCommunityInfo(communities, off, adj);
-    for (int i=0; i<communities.size(); i++) {
-    	vector<vertexId_t> comm = communities[i];
-        subgraphCSR(comm, off, adj, &off_sub, &adj_sub, &nv_sub, &ne_sub);
-        cuInit.maxNV = nv_sub+1;
-        cuInit.csrNV = nv_sub;
-        cuInit.csrNE = ne_sub;
-        cuInit.csrOff = off_sub;
-        cuInit.csrAdj = adj_sub;
-        custing.initializeCuStinger(cuInit);
-		bc = (float *)calloc(nv, sizeof(float));
-		StaticBC sbc(bc);
-		sbc.Init(custing);
-		sbc.Reset();
-		start_clock(ce_start, ce_stop);
-		sbc.Run(custing);
-		time = end_clock(ce_start, ce_stop);
-		printf("%d %f\n", i+1, time);
-		totalTime += time;
-		free(off_sub);
-		free(adj_sub);
-		free(bc);
-        custing.freecuStinger();
-    }
-    printf("Total time for %d communities: %f\n", communities.size(), totalTime);
+    printCommunityInfo(communities, off, adj);
+//    for (int i=0; i<communities.size(); i++) {
+//    	vector<vertexId_t> comm = communities[i];
+//        subgraphCSR(comm, off, adj, &off_sub, &adj_sub, &nv_sub, &ne_sub);
+//        cuInit.maxNV = nv_sub+1;
+//        cuInit.csrNV = nv_sub;
+//        cuInit.csrNE = ne_sub;
+//        cuInit.csrOff = off_sub;
+//        cuInit.csrAdj = adj_sub;
+//        custing.initializeCuStinger(cuInit);
+//		bc = (float *)calloc(nv, sizeof(float));
+//		StaticBC sbc(bc);
+//		sbc.Init(custing);
+//		sbc.Reset();
+//		start_clock(ce_start, ce_stop);
+//		sbc.Run(custing);
+//		time = end_clock(ce_start, ce_stop);
+//		printf("%d %f\n", i+1, time);
+//		totalTime += time;
+//		free(off_sub);
+//		free(adj_sub);
+//		free(bc);
+//        custing.freecuStinger();
+//    }
+//    printf("Total time for %d communities: %f\n", communities.size(), totalTime);
 
     free(off);
     free(adj);
