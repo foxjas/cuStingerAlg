@@ -24,6 +24,8 @@ int main(int argc, char* argv[]) {
     TM.stop();
     TM.print("Maximal Independent Set");
 
+    mis.validate();
+
     // auto is_correct = bfs_top_down.validate();
     // std::cout << (is_correct ? "\nCorrect <>\n\n" : "\n! Not Correct\n\n");
     // return is_correct;

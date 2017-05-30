@@ -9,7 +9,8 @@ struct MISData {
     								edges(custinger.nE()) {} // syntax?
 
 	TwoLevelQueue<vid_t> queue;
-    int* statuses;
+    int* values;
+    int* canRemove;
     int nodes;
     int edges;
 };
