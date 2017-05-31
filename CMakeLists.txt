@@ -20,16 +20,9 @@ cuda_add_library(cuStingerAlg ${CU_SRCS})
 cuda_add_executable(bfs++ test/BFStest++.cu)
 cuda_add_executable(bfs   test/BFStest.cu)
 cuda_add_executable(CC    test/CCtest.cu)
-<<<<<<< Updated upstream
-=======
 cuda_add_executable(MIS   test/MIStest.cu)
->>>>>>> Stashed changes
 
 target_link_libraries(bfs++ cuStingerAlg cuStinger)
 target_link_libraries(bfs   cuStingerAlg cuStinger)
 target_link_libraries(CC    cuStingerAlg cuStinger)
-<<<<<<< Updated upstream
-=======
 target_link_libraries(MIS   cuStingerAlg cuStinger)
-
->>>>>>> Stashed changes
