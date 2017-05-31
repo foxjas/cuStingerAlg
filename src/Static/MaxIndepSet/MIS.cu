@@ -1,5 +1,10 @@
 #include "Static/MaxIndepSet/MIS.cuh"
 
+/* 
+ * hash and initialization body sourced from 
+ * http://cs.txstate.edu/~burtscher/research/ECL-MIS/ECL-MIS_10.cu
+ */
+
 namespace custinger_alg {
 
 typedef unsigned char stattype;
@@ -15,6 +20,7 @@ static __device__ unsigned int hash(unsigned int val) {
 }
 
 //------------------------------------------------------------------------------
+
 /// Operators ///
 
 __device__ __forceinline__
@@ -31,58 +37,31 @@ void VertexInit(const Vertex& src, void* optional_field) {
       val = (res + res) | 1;
     }
     MIS_data->values[index] = val;
-    MIS_data->canRemove[index] = 1;
-    // printf("%u\n", MIS_data->values[index]); // VERIFIED
-}
-
-/** 
- * Use bit string for canRemove
- */
-__device__ __forceinline__
-void findMaximums(const Vertex& src, const Edge& edge, void* optional_field) {
-    auto MIS_data = reinterpret_cast<MISData*>(optional_field);
-    int dst = edge.dst();
-    int v = src.id();
-    int* values = MIS_data->values;
-    int* canRemove = MIS_data->canRemove;
-    int greater = ((values[v] > values[dst]) || ((values[v] == values[dst]) && (v > dst)));
-    atomicAnd(canRemove+v, greater);
-    // canRemove[v] &= greater;
 }
 
 __device__ __forceinline__
-void findRemovalNeighbors(const Vertex& src, const Edge& edge, void* optional_field) {
+void VertexFilter(const Vertex& src, void* optional_field) {
     auto MIS_data = reinterpret_cast<MISData*>(optional_field);
     int v = src.id();
-    int* canRemove = MIS_data->canRemove;
+    int v_dest;
     int* values = MIS_data->values;
-    // if (v<50 && src.edge(0).dst() == edge.dst())
-    //   printf("(%d,%d) ", v, canRemove[v]);
-    if (canRemove[v]) {
-      values[v] = in; // race condition O?
-    } else {
-      int neighborIn = canRemove[edge.dst()];
-      atomicOr(canRemove+v, neighborIn);
-      // canRemove[v] += neighborIn;
-    }
-    if (v<50 && src.edge(0).dst() == edge.dst())
-      printf("(%d,%d) ", v, values[v]);
-}
-
-// TODO: can be improved if we could do forAllVertices in a queue (less work each round)
-__device__ __forceinline__
-void removeAndEnqueue(vid_t index, void* optional_field) {
-    auto MIS_data = reinterpret_cast<MISData*>(optional_field);
-    int* values = MIS_data->values;
-    int* canRemove = MIS_data->canRemove;
-    if (values[index] & 1) { // v neither in nor out
-      if (!canRemove[index]) {
-        MIS_data->queue.insert(index);
-        canRemove[index] = 1;
-      } else {
-        values[index] = out;
+    if (values[v] & 1) { // neither in nor out
+      int i = 0;
+      v_dest = src.edge(i).dst();
+      while ((i < src.degree()) && ((values[v] > values[v_dest]) || ((values[v] == values[v_dest]) && (v > v_dest)))) {
+        i++;
+        v_dest = src.edge(i).dst();
       }
-    } 
+      if (i < src.degree()) { // v is not a local maximum
+        MIS_data->queue.insert(v);
+      } else { // v is a local maximum; process neighbors
+        for (int i = 0; i < src.degree(); i++) {
+          v_dest = src.edge(i).dst();
+          values[v_dest] = out;
+        }
+        values[src.id()] = in;
+      }
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -91,59 +70,40 @@ MIS::MIS(custinger::cuStinger& custinger) :
                                        StaticAlgorithm(custinger),
                                        host_MIS_data(custinger) {
     cuMalloc(host_MIS_data.values, custinger.nV());
-    cuMalloc(host_MIS_data.canRemove, custinger.nV());
     device_MIS_data = register_data(host_MIS_data);
     reset();
 }
 
 MIS::~MIS() {
     cuFree(host_MIS_data.values);
-    cuFree(host_MIS_data.canRemove);
 }
 
 void MIS::reset() {
     host_MIS_data.queue.clear();
-    forAllVertices<VertexInit>(custinger, device_MIS_data);
 }
 
-// TODO: forAllEdges call seems broken; forced to use hacky, slow workaround for enqueueing vertices
 void MIS::run() {
-    // forAllEdges<findMaximums>(custinger, device_MIS_data);
-    // syncDeviceWithHost();
-    // forAllEdges<findRemovalNeighbors>(custinger, device_MIS_data);
-    // syncDeviceWithHost();
-    // forAllnumV<removeAndEnqueue>(custinger, device_MIS_data);
-    // host_MIS_data.queue.swap();
-
-    for (int i=0; i<custinger.nV(); i++) {
-      host_MIS_data.queue.insert(i);
-    }
-    printf("Initial queue size: %d\n", host_MIS_data.queue.size()); 
-
     using namespace timer;
     Timer<DEVICE> TM;
     TM.start();
+
+    forAllVertices<VertexInit>(custinger, device_MIS_data);
+
+    forAllVertices<VertexFilter>(custinger, device_MIS_data);
+    host_MIS_data.queue.swap();
+    printf("host size after VertexFilter: %d\n", host_MIS_data.queue.size());
     while (host_MIS_data.queue.size() > 0) {
-      load_balacing.traverse_edges<findMaximums>(host_MIS_data.queue, device_MIS_data);
-      // syncDeviceWithHost();
-      printf("host size after findMaximums: %d\n", host_MIS_data.queue.size());
-
-      load_balacing.traverse_edges<findRemovalNeighbors>(host_MIS_data.queue, device_MIS_data);
-      // syncDeviceWithHost();
-      printf("host size after findRemovalNeighbors: %d\n", host_MIS_data.queue.size());
-
-      forAllnumV<removeAndEnqueue>(custinger, device_MIS_data);
+      forAllVertices<VertexFilter>(custinger, device_MIS_data);
       host_MIS_data.queue.swap();
-      printf("host size after removeAndEnqueue: %d\n", host_MIS_data.queue.size());
+      printf("host size after VertexFilter: %d\n", host_MIS_data.queue.size());
     }
     TM.stop();
-    TM.print("Main computation time");
+    TM.print("Main computation body");
 }
 
 void MIS::release() {
-    cuFree(host_MIS_data.values, host_MIS_data.canRemove);
+    cuFree(host_MIS_data.values);
     host_MIS_data.values = nullptr;
-    host_MIS_data.canRemove = nullptr;
 }
 
 bool MIS::validate() {
@@ -154,8 +114,6 @@ bool MIS::validate() {
     const eoff_t* offsets = graph.out_offsets();
     const eoff_t* adjacencies = graph.out_edges();
     int numIn = 0;
-    int numInConflict = 0;
-    int numOutConflict = 0;
     for (int v = 0; v < custinger.nV(); v++) {
       if ((host_values[v] != in) && (host_values[v] != out)) {
         fprintf(stderr, "ERROR: found unprocessed node in graph\n\n");  exit(-1);
@@ -164,9 +122,8 @@ bool MIS::validate() {
         numIn += 1;
         for (int i = offsets[v]; i < offsets[v + 1]; i++) {
           if (host_values[adjacencies[i]] == in) {
-            numInConflict += 1;
-            // fprintf(stderr, "ERROR: found adjacent nodes in MIS\n\n");  
-            // exit(-1);
+            fprintf(stderr, "ERROR: found adjacent nodes in MIS\n\n");  
+            exit(-1);
           }
         }
       } else {
@@ -177,15 +134,13 @@ bool MIS::validate() {
           }
         }
         if (flag == 0) {
-          // fprintf(stderr, "ERROR: set is not maximal\n\n");
-          // exit(-1);
-          numOutConflict += 1;
+          fprintf(stderr, "ERROR: set is not maximal\n\n");
+          exit(-1);
         }
       }
     }
 
     printf("Vertices in set: %d\n", numIn);
-    printf("In conflicts: %d\n", numInConflict);
     delete[] host_values;
 }
 

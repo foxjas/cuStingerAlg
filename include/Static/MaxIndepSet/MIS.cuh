@@ -10,7 +10,6 @@ struct MISData {
 
 	TwoLevelQueue<vid_t> queue;
     int* values;
-    int* canRemove;
     int nodes;
     int edges;
 };
@@ -20,7 +19,6 @@ class MIS final : public StaticAlgorithm {
 	    explicit MIS(cuStinger& custinger);
 	    ~MIS();
 
-	    void set_parameters(vid_t source);
 		void reset()    override;
 		void run()      override;
 		void release()  override;
