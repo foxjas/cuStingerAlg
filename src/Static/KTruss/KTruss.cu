@@ -1,6 +1,8 @@
 #include "Static/KTruss/KTruss.cuh"
 #include "Support/Device/CudaUtil.cuh"
+#include "Support/Device/Timer.cuh"
 
+using namespace timer;
 namespace custinger_alg {
 
 void kTrussOneIteration(cuStinger& custinger,
@@ -117,12 +119,16 @@ void KTruss::run() {
     hostKTrussData.maxK = 3;
     syncDeviceWithHost();
     int iterations = 0;
+    Timer<DEVICE, seconds> TM;
 
     while (true) {
         // if(hostKTrussData.maxK >= 5)
         //     break;
         bool needStop = false;
+        TM.start();
         bool     more = findTrussOfK(needStop);
+        TM.stop();
+        std::cout << "k-iter=" << hostKTrussData.maxK << ":" << TM.duration() << std::endl;
         if (!hostKTrussData.ne_remaining) {
             hostKTrussData.maxK--;
             syncDeviceWithHost();
@@ -241,13 +247,18 @@ void KTruss::runDynamic(){
     syncHostWithDevice();
     forAllVertices<ktruss_operators::resetWeights>(custinger, deviceKTrussData);
 
+    Timer<DEVICE, seconds> TM;
     int iterations = 0;
     while (true) {
         //if(hostKTrussData.maxK >= 5)
         //    break;
         //std::cout << "New iteration" << std::endl;
         bool needStop = false;
+        TM.start();
         bool     more = findTrussOfKDynamic(needStop);
+        TM.stop();
+        std::cout << "k-iter=" << hostKTrussData.maxK << ":" << TM.duration() << std::endl;
+
         CHECK_CUDA_ERROR
     //    std::cout << hostKTrussData.ne_remaining << std::endl;
         // if (more == false && needStop) {

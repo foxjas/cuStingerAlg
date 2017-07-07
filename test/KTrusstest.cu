@@ -88,7 +88,7 @@ void runKtruss(const cuStingerInit& custinger_init, int alg, int maxk,
                     kt.run();
 
                     TM.stop();
-                    std::cout << "graph=" << graphName << "\nk=" << kt.getMaxK()
+                    std::cout << "k=" << kt.getMaxK()
                               << ":" << TM.duration() << std::endl;
 
                     //custiger_graph.freecuStinger();
@@ -105,7 +105,7 @@ void runKtruss(const cuStingerInit& custinger_init, int alg, int maxk,
                     kt.runDynamic();
 
                     TM.stop();
-                    std::cout << "graph=" << graphName << "\nk=" << kt.getMaxK()
+                    std::cout << "k=" << kt.getMaxK()
                               << ":" << TM.duration() << std::endl;
                     //kt.release();
 
@@ -126,7 +126,7 @@ void runKtruss(const cuStingerInit& custinger_init, int alg, int maxk,
 
                     TM.stop();
 
-                    std::cout << "graph=" << graphName << "\nk=" << kt.getMaxK()
+                    std::cout << "k=" << kt.getMaxK()
                               << ":" << TM.duration() << std::endl;
                     //kt.release();
                     //custiger_graph.freecuStinger();
