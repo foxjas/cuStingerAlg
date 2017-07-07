@@ -131,6 +131,24 @@ void runKtruss(const cuStingerInit& custinger_init, int alg, int maxk,
                     //kt.release();
                     //custiger_graph.freecuStinger();
                 }
+                if (alg & 8) {
+                    kt.setInitParameters(nv, ne, tsp, nbl, shifter,
+                                         blocks, sps);
+                    kt.init();
+                    kt.copyOffsetArrayDevice(d_off);
+                    kt.reset();
+
+                    TM.start();
+
+                    kt.runForKDynamic(maxk);
+
+                    TM.stop();
+
+                    std::cout << "k=" << kt.getMaxK()
+                              << ":" << TM.duration() << std::endl;
+                    //kt.release();
+                    //custiger_graph.freecuStinger();
+                }
                 kt.release();
             }
         }
