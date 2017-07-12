@@ -48,13 +48,30 @@ class VertexBased {
 public:
     //explicit VertexBased() noexcept = default;
 
-    template<void (*Operator)(custinger::Vertex, custinger::Edge, void*)>
+    /*template<void (*Operator)(custinger::Vertex, custinger::Edge, void*)>
     void traverse_edges(const custinger::vid_t* d_input, int num_vertices,
                         void* optional_field) noexcept;
 
     template<typename Operator>
     void traverse_edges(const custinger::vid_t* d_input, int num_vertices,
-                        Operator op) noexcept;
+                        Operator op) noexcept;*/
+
+    template<typename Operator>
+    void apply(custinger::cuStinger& custinger,
+               const custinger::vid_t* d_input, int num_vertices,
+               const Operator& op) noexcept;
+
+    template<typename Operator>
+    void apply(custinger::cuStinger& custinger, const Operator& op) noexcept;
+
+    /*template<typename Operator>
+    __device__ __forceinline__
+    apply(const vid_t* neightbor_ptr, degree_t degree, const Operator& op);
+
+    template<typename Operator>
+    __device__ __forceinline__
+    apply(vid_t src_id, const vid_t* neightbor_ptr, degree_t degree,
+          const Operator& op);*/
 
 private:
     static const int         BLOCK_SIZE = 256;

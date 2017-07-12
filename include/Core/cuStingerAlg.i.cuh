@@ -2,7 +2,7 @@
  * @author Federico Busato                                                  <br>
  *         Univerity of Verona, Dept. of Computer Science                   <br>
  *         federico.busato@univr.it
- * @date April, 2017
+ * @date July, 2017
  * @version v2
  *
  * @copyright Copyright © 2017 cuStinger. All rights reserved.
@@ -33,12 +33,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  * </blockquote>}
  */
+#include <cstring>
+
 namespace custinger_alg {
 
 inline StaticAlgorithm::StaticAlgorithm(custinger::cuStinger& custinger_)
                                         noexcept :
-                                    custinger(custinger_),
-                                    load_balacing(custinger_) {}
+                                            custinger(custinger_) {}
 
 inline StaticAlgorithm::~StaticAlgorithm() noexcept {
     cuFree(_d_ptr);
@@ -47,7 +48,7 @@ inline StaticAlgorithm::~StaticAlgorithm() noexcept {
 template<typename T>
 inline T* StaticAlgorithm::register_data(T& data) noexcept {
     if (_is_registered)
-        ERROR("register_data() must be called only one times")
+        ERROR("register_data() can be called only one times")
     _is_registered = true;
     _data_size     = sizeof(T);
     _h_ptr         = &data;
@@ -68,7 +69,7 @@ inline void StaticAlgorithm::syncDeviceWithHost() noexcept {
 }
 
 //==============================================================================
-
+/*
 template<typename T>
 inline Allocate::Allocate(T*& pointer, size_t num_items) noexcept {
     cuMalloc(pointer, num_items);
@@ -77,6 +78,6 @@ inline Allocate::Allocate(T*& pointer, size_t num_items) noexcept {
 
 inline Allocate::~Allocate() noexcept {
     cuFree(_pointer);
-}
+}*/
 
 } // namespace custinger_alg

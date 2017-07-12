@@ -55,11 +55,11 @@ class StaticAlgorithm {
 public:
     /**
      * @brief Default costructor
-     * @param[in] custinger_ cuStinger instance on which the algorithm is run
+     * @param[in] custinger cuStinger instance on which the algorithm is run
      * @remark the cuStinger instance reference can be used in also methods
      *          throws `custinger` field
      */
-    explicit StaticAlgorithm(custinger::cuStinger& custinger_) noexcept;
+    explicit StaticAlgorithm(custinger::cuStinger& custinger) noexcept;
 
     /**
      * @brief Decostructor
@@ -115,11 +115,11 @@ public:
      *         the `syncDeviceWithHost()` and `syncHostWithDevice()` methods
      */
     template<typename T>
-    T* register_data(T& data) noexcept;
+    T* register_data(T& data) noexcept final;
 
     /**
      * @brief Synchronize the Device with the Host
-     * @@details Copy the algorithm-dependent data from the device to the host in
+     * @details Copy the algorithm-dependent data from the device to the host in
      *         the reference passed to `register_data()`
      * @pre    the user must call `register_data()` before
      * @remark the user should call this method after the main algorithm
@@ -139,13 +139,6 @@ public:
 
 protected:
     /**
-     * @brief Load balancing class
-     * @details provide the load balancing fucntionalities to efficiently
-     *          traverse the graph
-     */
-    load_balacing::BinarySearch load_balacing;
-
-    /**
      * @brief custinger reference
      */
     custinger::cuStinger& custinger;
@@ -158,7 +151,7 @@ private:
 };
 
 //==============================================================================
-
+/*
 class Allocate {
 public:
     template<typename T>
@@ -167,7 +160,7 @@ public:
     ~Allocate() noexcept;
 private:
     void* _pointer;
-};
+};*/
 
 } // namespace custinger_alg
 
