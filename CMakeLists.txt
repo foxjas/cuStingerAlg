@@ -13,7 +13,7 @@ include_directories(externals/cuStinger/include)
 set(ENABLE_TARGET ON)
 include(externals/cuStinger/util/CMakeLists.txt)
 #-------------------------------------------------------------------------------
-file(GLOB_RECURSE CU_SRCS ${PROJECT_SOURCE_DIR}/src/Static/KTruss/*.cu)
+file(GLOB_RECURSE CU_SRCS ${PROJECT_SOURCE_DIR}/src/Static/MaxIndepSet/*.cu)
 cuda_add_library(cuStingerAlg ${CU_SRCS})
 #-------------------------------------------------------------------------------
 

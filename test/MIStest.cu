@@ -1,22 +1,30 @@
 
 #include "Static/MaxIndepSet/MIS.cuh"
+#include "Support/Device/Timer.cuh"
+
+using namespace timer;
+using namespace custinger;
+using namespace custinger_alg;
 
 int main(int argc, char* argv[]) {
-    using namespace timer;
-    using namespace custinger;
-    using namespace custinger_alg;
+    using namespace graph::structure_prop;
 
-    graph::GraphStd<vid_t, eoff_t> graph; 
-    graph.read(argv[1]); // directed/undirected? need undirected for MIS
+    graph::GraphStd<vid_t, eoff_t> graph(argv[1]);
+    // graph.read(argv[1]);
 
-    cuStingerInit custinger_init(graph.nV(), graph.nE(), graph.out_offsets(),
-                                 graph.out_edges());
+    cuStingerInit custinger_init(graph.nV(), graph.nE(),
+                                 graph.out_offsets_ptr(),
+                                 graph.out_edges_ptr());
+
+    // hack to get rid of "Edge data not initialized error"
+    auto weights = new int[graph.nE()]();
+    custinger_init.insertEdgeData(weights);
 
     cuStinger custiger_graph(custinger_init);
-    MIS mis(custiger_graph);
-    // bfs_top_down.set_parameters(graph.max_out_degree_vertex());
 
-    Timer<DEVICE> TM;
+    MIS mis(custiger_graph);
+
+    Timer<DEVICE, seconds> TM;
     TM.start();
 
     mis.run();
@@ -26,7 +34,4 @@ int main(int argc, char* argv[]) {
 
     mis.validate();
 
-    // auto is_correct = bfs_top_down.validate();
-    // std::cout << (is_correct ? "\nCorrect <>\n\n" : "\n! Not Correct\n\n");
-    // return is_correct;
 }

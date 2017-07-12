@@ -1,4 +1,6 @@
 #include "Static/MaxIndepSet/MIS.cuh"
+#include "Support/Device/Timer.cuh"
+
 
 /* 
  * hash and initialization body sourced from 
@@ -84,18 +86,19 @@ void MIS::reset() {
 
 void MIS::run() {
     using namespace timer;
-    Timer<DEVICE> TM;
+    Timer<DEVICE, seconds> TM;
     TM.start();
 
     forAllVertices<VertexInit>(custinger, device_MIS_data);
+    printf("hi!\n");
 
     forAllVertices<VertexFilter>(custinger, device_MIS_data);
     host_MIS_data.queue.swap();
-    printf("host size after VertexFilter: %d\n", host_MIS_data.queue.size());
-    while (host_MIS_data.queue.size() > 0) {
+    printf("host size after VertexFilter: %d\n", host_MIS_data.queue.input_size());
+    while (host_MIS_data.queue.input_size() > 0) {
       forAllVertices<VertexFilter>(custinger, device_MIS_data);
       host_MIS_data.queue.swap();
-      printf("host size after VertexFilter: %d\n", host_MIS_data.queue.size());
+      printf("host size after VertexFilter: %d\n", host_MIS_data.queue.input_size());
     }
     TM.stop();
     TM.print("Main computation body");
@@ -111,8 +114,8 @@ bool MIS::validate() {
     GraphStd<vid_t, eoff_t> graph(custinger.csr_offsets(), custinger.nV(), custinger.csr_edges(), custinger.nE());
     int* host_values = new int[graph.nV()];
     cuMemcpyToHost(host_MIS_data.values, graph.nV(), host_values);
-    const eoff_t* offsets = graph.out_offsets();
-    const eoff_t* adjacencies = graph.out_edges();
+    const eoff_t* offsets = graph.out_offsets_ptr();
+    const eoff_t* adjacencies = graph.out_edges_ptr();
     int numIn = 0;
     for (int v = 0; v < custinger.nV(); v++) {
       if ((host_values[v] != in) && (host_values[v] != out)) {
