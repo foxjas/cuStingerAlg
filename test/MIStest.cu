@@ -9,16 +9,12 @@ using namespace custinger_alg;
 int main(int argc, char* argv[]) {
     using namespace graph::structure_prop;
 
-    graph::GraphStd<vid_t, eoff_t> graph(argv[1]);
-    // graph.read(argv[1]);
+    graph::GraphStd<vid_t, eoff_t> graph;
+    CommandLineParam cmd(graph, argc, argv);
 
     cuStingerInit custinger_init(graph.nV(), graph.nE(),
                                  graph.out_offsets_ptr(),
                                  graph.out_edges_ptr());
-
-    // hack to get rid of "Edge data not initialized error"
-    auto weights = new int[graph.nE()]();
-    custinger_init.insertEdgeData(weights);
 
     cuStinger custiger_graph(custinger_init);
 

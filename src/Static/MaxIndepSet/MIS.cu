@@ -1,10 +1,11 @@
 #include "Static/MaxIndepSet/MIS.cuh"
 #include "Support/Device/Timer.cuh"
 
-
 /* 
  * hash and initialization body sourced from 
  * http://cs.txstate.edu/~burtscher/research/ECL-MIS/ECL-MIS_10.cu
+ * 
+ * NOTE: implementation correctness assumes input has no self-loops
  */
 
 namespace custinger_alg {
@@ -21,10 +22,8 @@ static __device__ unsigned int hash(unsigned int val) {
   return (val >> 16) ^ val;
 }
 
-//------------------------------------------------------------------------------
-
 /// Operators ///
-
+//------------------------------------------------------------------------------
 __device__ __forceinline__
 void VertexInit(const Vertex& src, void* optional_field) {
     auto MIS_data = reinterpret_cast<MISData*>(optional_field);
@@ -49,19 +48,21 @@ void VertexFilter(const Vertex& src, void* optional_field) {
     int* values = MIS_data->values;
     if (values[v] & 1) { // neither in nor out
       int i = 0;
-      v_dest = src.edge(i).dst();
-      while ((i < src.degree()) && ((values[v] > values[v_dest]) || ((values[v] == values[v_dest]) && (v > v_dest)))) {
-        i++;
-        v_dest = src.edge(i).dst();
+      while (i < src.degree()) {
+        v_dest = src.edge(i).dst_id();
+        if (!((values[v] > values[v_dest]) || ((values[v] == values[v_dest]) && (v > v_dest))))
+           break;
+        i += 1;
       }
+
       if (i < src.degree()) { // v is not a local maximum
         MIS_data->queue.insert(v);
       } else { // v is a local maximum; process neighbors
         for (int i = 0; i < src.degree(); i++) {
-          v_dest = src.edge(i).dst();
+          v_dest = src.edge(i).dst_id();
           values[v_dest] = out;
         }
-        values[src.id()] = in;
+        values[v] = in;
       }
     }
 }
@@ -69,43 +70,44 @@ void VertexFilter(const Vertex& src, void* optional_field) {
 //------------------------------------------------------------------------------
 
 MIS::MIS(custinger::cuStinger& custinger) :
-                                       StaticAlgorithm(custinger),
+                                        StaticAlgorithm(custinger),
                                        host_MIS_data(custinger) {
-    cuMalloc(host_MIS_data.values, custinger.nV());
+    gpu::allocate(host_MIS_data.values, custinger.nV());
     device_MIS_data = register_data(host_MIS_data);
     reset();
 }
 
 MIS::~MIS() {
-    cuFree(host_MIS_data.values);
+    gpu::free(host_MIS_data.values);
 }
 
 void MIS::reset() {
     host_MIS_data.queue.clear();
+    syncDeviceWithHost(); // why is this needed for correctness?
+
 }
 
+// synchronization between kernel calls?
 void MIS::run() {
     using namespace timer;
-    Timer<DEVICE, seconds> TM;
+    Timer<DEVICE> TM;
     TM.start();
 
-    forAllVertices<VertexInit>(custinger, device_MIS_data);
-    printf("hi!\n");
-
+    forAllVertices<VertexInit>(custinger, device_MIS_data); // initialization
     forAllVertices<VertexFilter>(custinger, device_MIS_data);
     host_MIS_data.queue.swap();
-    printf("host size after VertexFilter: %d\n", host_MIS_data.queue.input_size());
-    while (host_MIS_data.queue.input_size() > 0) {
-      forAllVertices<VertexFilter>(custinger, device_MIS_data);
+    // printf("host size after VertexFilter: %d\n", host_MIS_data.queue.size());
+    while (host_MIS_data.queue.size() > 0) {
+      forAllVertices<VertexFilter>(custinger, device_MIS_data);    
       host_MIS_data.queue.swap();
-      printf("host size after VertexFilter: %d\n", host_MIS_data.queue.input_size());
+      // printf("host size after VertexFilter: %d\n", host_MIS_data.queue.size());
     }
     TM.stop();
-    TM.print("Main computation body");
+    TM.print("Computation time");
 }
 
 void MIS::release() {
-    cuFree(host_MIS_data.values);
+    gpu::free(host_MIS_data.values);
     host_MIS_data.values = nullptr;
 }
 
@@ -116,13 +118,14 @@ bool MIS::validate() {
     cuMemcpyToHost(host_MIS_data.values, graph.nV(), host_values);
     const eoff_t* offsets = graph.out_offsets_ptr();
     const eoff_t* adjacencies = graph.out_edges_ptr();
-    int numIn = 0;
-    for (int v = 0; v < custinger.nV(); v++) {
+
+    int count = 0;
+    for (int v = 0; v < graph.nV(); v++) {
       if ((host_values[v] != in) && (host_values[v] != out)) {
         fprintf(stderr, "ERROR: found unprocessed node in graph\n\n");  exit(-1);
       }
       if (host_values[v] == in) {
-        numIn += 1;
+        count++;
         for (int i = offsets[v]; i < offsets[v + 1]; i++) {
           if (host_values[adjacencies[i]] == in) {
             fprintf(stderr, "ERROR: found adjacent nodes in MIS\n\n");  
@@ -143,7 +146,7 @@ bool MIS::validate() {
       }
     }
 
-    printf("Vertices in set: %d\n", numIn);
+    printf("elements in set: %d (%.1f%%)\n", count, 100.0 * count / graph.nV());
     delete[] host_values;
 }
 
