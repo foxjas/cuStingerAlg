@@ -57,6 +57,7 @@ void VertexFilter(const Vertex& src, void* optional_field) {
 
       if (i < src.degree()) { // v is not a local maximum
         MIS_data->queue.insert(v);
+        // TODO: [debugging] insert print here?
       } else { // v is a local maximum; process neighbors
         for (int i = 0; i < src.degree(); i++) {
           v_dest = src.edge(i).dst_id();
@@ -95,6 +96,7 @@ void MIS::run() {
 
     forAllVertices<VertexInit>(custinger, device_MIS_data); // initialization
     forAllVertices<VertexFilter>(custinger, device_MIS_data);
+    syncHostWithDevice();
     host_MIS_data.queue.swap();
     // printf("host size after VertexFilter: %d\n", host_MIS_data.queue.size());
     while (host_MIS_data.queue.size() > 0) {
@@ -118,7 +120,6 @@ bool MIS::validate() {
     cuMemcpyToHost(host_MIS_data.values, graph.nV(), host_values);
     const eoff_t* offsets = graph.out_offsets_ptr();
     const eoff_t* adjacencies = graph.out_edges_ptr();
-
     int count = 0;
     for (int v = 0; v < graph.nV(); v++) {
       if ((host_values[v] != in) && (host_values[v] != out)) {
