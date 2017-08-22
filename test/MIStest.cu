@@ -1,6 +1,6 @@
 
 #include "Static/MaxIndepSet/MIS.cuh"
-#include "Support/Device/Timer.cuh"
+// #include "Support/Device/Timer.cuh"
 
 using namespace timer;
 using namespace custinger;

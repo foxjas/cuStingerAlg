@@ -1,5 +1,5 @@
 #include "Static/MaxIndepSet/MIS.cuh"
-#include "Support/Device/Timer.cuh"
+// #include "Support/Device/Timer.cuh"
 
 /* 
  * hash and initialization body sourced from 
