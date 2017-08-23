@@ -1,5 +1,4 @@
 #include "Static/MaxIndepSet/MIS.cuh"
-// #include "Support/Device/Timer.cuh"
 
 /* 
  * hash and initialization body sourced from 
@@ -57,7 +56,6 @@ void VertexFilter(const Vertex& src, void* optional_field) {
 
       if (i < src.degree()) { // v is not a local maximum
         MIS_data->queue.insert(v);
-        // TODO: [debugging] insert print here?
       } else { // v is a local maximum; process neighbors
         for (int i = 0; i < src.degree(); i++) {
           v_dest = src.edge(i).dst_id();
@@ -75,7 +73,7 @@ MIS::MIS(custinger::cuStinger& custinger) :
                                        host_MIS_data(custinger) {
     gpu::allocate(host_MIS_data.values, custinger.nV());
     device_MIS_data = register_data(host_MIS_data);
-    reset();
+    syncDeviceWithHost();
 }
 
 MIS::~MIS() {
@@ -84,28 +82,42 @@ MIS::~MIS() {
 
 void MIS::reset() {
     host_MIS_data.queue.clear();
-    syncDeviceWithHost(); // why is this needed for correctness?
+    syncDeviceWithHost();
 
 }
 
-// synchronization between kernel calls?
 void MIS::run() {
     using namespace timer;
     Timer<DEVICE> TM;
+    Timer<DEVICE> TM2;
     TM.start();
 
-    forAllVertices<VertexInit>(custinger, device_MIS_data); // initialization
+    TM2.start();
+    forAllVertices<VertexInit>(custinger, device_MIS_data);
+    TM2.stop();
+    TM2.print("Value initialization time:");
+
+    printf("Initial size: %d\n", custinger.nV());
+    TM2.start();
     forAllVertices<VertexFilter>(custinger, device_MIS_data);
-    syncHostWithDevice();
     host_MIS_data.queue.swap();
-    // printf("host size after VertexFilter: %d\n", host_MIS_data.queue.size());
+    syncDeviceWithHost();
+    TM2.stop();
+    TM2.print("Iteration time");
+
+    printf("Active queue size: %d\n", host_MIS_data.queue.size());
     while (host_MIS_data.queue.size() > 0) {
-      forAllVertices<VertexFilter>(custinger, device_MIS_data);    
+      TM2.start();
+      forAllVertices<VertexFilter>(host_MIS_data.queue, device_MIS_data);    
       host_MIS_data.queue.swap();
-      // printf("host size after VertexFilter: %d\n", host_MIS_data.queue.size());
+      syncDeviceWithHost();
+      TM2.stop();
+      TM2.print("Iteration time");
+
+      printf("Active queue size: %d\n", host_MIS_data.queue.size());
     }
     TM.stop();
-    TM.print("Computation time");
+    TM.print("MIS computation time");
 }
 
 void MIS::release() {
